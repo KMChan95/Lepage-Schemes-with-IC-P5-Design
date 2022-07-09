@@ -1,2 +1,2 @@
-# Lepage-Schemes-with-IC-P5-Design
-Various distribution-free Lepage-type schemes are designed based on a pre-specified IC-P5 value, and their performances are compared extensively.
+# Supplementary Materials for Article TTQM-2021-0199
+Title: Exponentially weighted moving average Lepage-type schemes based on the lower-order percentile of the run-length metric and their use in monitoring time-occupancy in Google applications
