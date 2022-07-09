@@ -1,0 +1,86 @@
+######################################################################################
+#The R program below is for the EWMA-Lepage with time-varying UCL (ELTV) scheme
+#m: Phase-I sample size, n: Phase-II sample size
+#case=1 (m=100, n=5), case=2 (m=100, n=15), case=3 (m=300, n=5), case=4 (m=300, n=15)
+#C: charting constant, lam: smoothing parameter, tau: steady-state level
+#loc: location parameter, sca: scale parameter
+#IC case: (loc, sca) = (0, 1)
+######################################################################################
+
+library(doParallel)
+library(foreach)
+
+eltv=function(case, m, n, C, lam, tau, win_lim=10000, sim_num=50000, loc, sca)
+{
+  N=m+n
+  x=rep(0,m)
+  y=rep(0,n)
+  z=rep(0,n)
+  lep=rep(0,win_lim)
+  comp=rep(0,win_lim)
+  ewma=rep(0,win_lim)
+  evl=c(3.52572525,3.72876761,3.575762399,3.83059074) #E[Var(Lj|Xm, IC)]
+  vel=c(0.02665154,0.07874633,0.007554594,0.01474126) #Var[E(Lj|Xm, IC)]
+  
+  grp=makeCluster(7)
+  registerDoParallel(grp)
+  
+  rl=rep(0,sim_num)
+  rl=foreach(i=1:sim_num,.combine=c)%dopar%
+    {
+      x=rnorm(m,0,1)
+      j=0
+      
+      repeat
+      {
+        j=j+1
+        if(j<tau) {y=rnorm(n,0,1)}
+        else {y=rnorm(n,loc,sca)}
+        R=rank(c(x,y))
+        
+        WRS=((sum(R[(m+1):N]))-(0.5*n*(N+1)))/sqrt((m*n*(N+1)/12))
+        
+        for(k in 1:n) {z[k]=abs(R[m+k]-(0.5*(N+1)))}
+        if((N%%2)==0) {AB=((sum(z[1:n]))-(0.25*n*N))/sqrt(((m*n*((N*N)-4)/(48*(N-1)))))}
+        else {AB=((sum(z[1:n]))-(0.25*n*((N*N)-1))/N)/sqrt(((m*n*(N+1)*((N*N)+3)/(48*N*N))))}
+        
+        lep[j]=(WRS*WRS)+(AB*AB)
+        for (a in 1:j) {comp[a]=lam*((1-lam)^(j-a))*lep[a]}
+        value=sum(comp[1:j])+((1-lam)^j)*2
+        ewma[j]=value
+        
+        part_one=((lam)/(2-lam))*(1-((1-lam)^(2*j)))
+        part_two=(1-((1-lam)^j))^2
+        var_elj=((part_one)*(evl[case]))+((part_two)*(vel[case]))
+        H=2+(C*(sqrt(var_elj)))
+        if((ewma[j]>=H)||(j==win_lim)) break
+      }
+      rl[i]=j
+    }
+  stopCluster(grp)
+  
+  print(c(m,n,lam,tau,C,loc,sca, mean(rl),mean(rl[rl>=tau]),length(rl[rl<tau])/sim_num,sqrt(var(rl)/sim_num),sd(rl),min(rl),quantile(rl,c(0.05,0.25,0.50,0.75,0.95)),max(rl)))
+
+  holder <-
+    data.frame("Type"="ELTV",
+      "Phase_1" =  m,
+      "Phase_2" = n,
+      "Lambda" = lam,
+      "Steady" = tau,
+      "Const" = C,
+      "Location" = loc,
+      "Scale" = sca,
+      "ARL" = mean(rl),
+      "CED" = mean(rl[rl>=tau]),
+      "FAR" = length(rl[rl<tau])/sim_num,
+      "Std_Err" = sqrt(var(rl) / sim_num),
+      "SDRL" = sd(rl),
+      "Min" = min(rl),
+      "P5" = quantile(rl, c(0.05)),
+      "P25" = quantile(rl, c(0.25)),
+      "P50" = quantile(rl, c(0.50)),
+      "P75" = quantile(rl, c(0.75)),
+      "P95" = quantile(rl, c(0.95)),
+      "Max" = max(rl))
+  return(holder)
+}
